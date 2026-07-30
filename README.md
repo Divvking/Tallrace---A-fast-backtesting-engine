@@ -1,4 +1,4 @@
-# QuantForge — High-Performance Historical Simulation Engine
+# Tallrace — High-Performance Historical Simulation Engine
 
 A C++ historical/bootstrap simulation engine for portfolio risk estimation, exposed to Python via pybind11, benchmarked against naive and vectorized Python implementations.
 
