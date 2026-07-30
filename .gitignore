@@ -1,0 +1,32 @@
+# Compiled extension module
+*.pyd
+*.so
+*.dll
+
+# C++ build artifacts
+*.o
+*.obj
+*.exe
+*.exp
+*.lib
+!cpp/*.lib
+build/
+bin/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# OS/editor cruft
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
