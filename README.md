@@ -14,20 +14,6 @@ Unlike parametric VaR (which assumes a theoretical distribution, e.g. Gaussian),
 
 **Known modeling limitation:** the bootstrap samples individual historical days independently (i.i.d.), which destroys temporal structure such as volatility clustering and crisis regimes. A block bootstrap (resampling contiguous historical windows) would preserve more realistic short-run dynamics — see Next Steps.
 
-## Architecture
-
-quantforge-sim/
-├── cpp/
-│ ├── simulation.h # Core engine interface
-│ ├── simulation.cpp # Portfolio return calc + bootstrap simulation
-│ └── bindings.cpp # pybind11 wrapper: validation, GIL release, NumPy I/O
-├── python/
-│ ├── test_run.py # Correctness smoke test with VaR/CVaR reporting
-│ └── benchmark.py # Performance comparison: naive vs vectorized vs C++
-├── tests/
-│ └── test_simulation.py # pytest suite: correctness, determinism, input validation
-└── quantforge_cpp.pyd # Compiled extension module (built via clang++/llvm-mingw)
-
 ## Build
 
 Compiled with `llvm-mingw` (clang), statically linked to avoid runtime DLL dependencies:
