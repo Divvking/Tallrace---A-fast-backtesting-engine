@@ -6,6 +6,17 @@
 
 namespace py = pybind11;
 
+// Below this many total elements (T*N), the fixed cost of a GIL
+// release/reacquire (a mutex lock/unlock plus thread-state juggling)
+// tends to exceed whatever parallelism it would buy — at microsecond-scale
+// workloads, releasing the GIL can slow things down rather than speed
+// them up. Above it, the compute is large enough that letting other
+// Python threads run during the native call is worth the fixed cost.
+// This is a heuristic, not a measured crossover point — if you have a
+// workload that lives right around this boundary, benchmark it directly
+// rather than trusting the constant.
+constexpr long long GIL_RELEASE_ELEMENT_THRESHOLD = 50'000;
+
 py::array_t<double> py_compute_portfolio_returns(
     py::array_t<double, py::array::c_style | py::array::forcecast> returns,
     py::array_t<double, py::array::c_style | py::array::forcecast> weights)
@@ -31,23 +42,35 @@ py::array_t<double> py_compute_portfolio_returns(
     const double* r_ptr = static_cast<double*>(buf_r.ptr);
     const double* w_ptr = static_cast<double*>(buf_w.ptr);
 
-    for (int i = 0; i < T * N; ++i) {
-        if (!std::isfinite(r_ptr[i]))
-            throw py::value_error("returns must contain only finite values");
-    }
+    // Weights are only N elements (small), so a dedicated pre-pass here is
+    // cheap. The expensive T*N validation over `returns` is fused into the
+    // compute loop in simulation.cpp instead — see compute_portfolio_returns.
     for (int i = 0; i < N; ++i) {
         if (!std::isfinite(w_ptr[i]))
             throw py::value_error("weights must contain only finite values");
     }
 
-    std::vector<double> result;
-    {
+    // Allocate the output array and grab its raw pointer up front, before any
+    // GIL release, so the native call can write straight into NumPy-owned
+    // memory. This replaces the previous std::vector<double> + memcpy, which
+    // paid for an extra T-length allocation and a full copy on every call.
+    py::array_t<double> output(T);
+    double* out_ptr = output.mutable_data();
+
+    bool ok;
+    const long long total_elements = static_cast<long long>(T) * N;
+    if (total_elements > GIL_RELEASE_ELEMENT_THRESHOLD) {
         py::gil_scoped_release release;
-        result = compute_portfolio_returns(r_ptr, T, N, w_ptr);
+        ok = compute_portfolio_returns(r_ptr, T, N, w_ptr, out_ptr);
+    } else {
+        // Below threshold: skip the release entirely. At this size the
+        // compute is on the order of the GIL lock/unlock cost itself.
+        ok = compute_portfolio_returns(r_ptr, T, N, w_ptr, out_ptr);
     }
 
-    py::array_t<double> output(result.size());
-    std::memcpy(output.mutable_data(), result.data(), result.size() * sizeof(double));
+    if (!ok)
+        throw py::value_error("returns must contain only finite values");
+
     return output;
 }
 
@@ -74,14 +97,20 @@ py::array_t<double> py_simulate_bootstrap(
             throw py::value_error("portfolio_returns must contain only finite values");
     }
 
-    std::vector<double> result;
+    // Same direct-write pattern as above: allocate + get pointer before
+    // release, write straight into NumPy's buffer inside the native call.
+    py::array_t<double> output(num_scenarios);
+    double* out_ptr = output.mutable_data();
+
     {
+        // Always released here (unlike compute_portfolio_returns above) —
+        // this loop does num_scenarios * horizon_days work, which is
+        // reliably compute-bound at any realistic problem size, so the
+        // GIL release consistently pays for itself.
         py::gil_scoped_release release;
-        result = simulate_bootstrap(ptr, T, num_scenarios, horizon_days, seed);
+        simulate_bootstrap(ptr, T, num_scenarios, horizon_days, seed, out_ptr);
     }
 
-    py::array_t<double> output(result.size());
-    std::memcpy(output.mutable_data(), result.data(), result.size() * sizeof(double));
     return output;
 }
 
