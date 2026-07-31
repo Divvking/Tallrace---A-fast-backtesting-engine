@@ -14,6 +14,7 @@ Unlike parametric VaR (which assumes a theoretical distribution, e.g. Gaussian),
 
 **Known modeling limitation:** the bootstrap samples individual historical days independently (i.i.d.), which destroys temporal structure such as volatility clustering and crisis regimes. A block bootstrap (resampling contiguous historical windows) would preserve more realistic short-run dynamics — see Next Steps.
 
+
 ## Architecture
 
 ```
@@ -30,6 +31,7 @@ tallrace-sim/
 │   └── test_simulation.py    # pytest suite: correctness, determinism, input validation
 └── tallrace_cpp.pyd        # Compiled extension module (built via clang++/llvm-mingw; not tracked in git)
 ```
+
 
 ## Build
 
